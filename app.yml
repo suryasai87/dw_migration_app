@@ -1,0 +1,21 @@
+name: dw-migration-assistant
+
+env:
+  - name: DATABRICKS_HOST
+  - name: DATABRICKS_TOKEN
+  - name: REACT_APP_LLM_ENDPOINT
+  - name: LLM_AGENT_ENDPOINT
+  - name: REACT_APP_DEFAULT_CATALOG
+  - name: REACT_APP_DEFAULT_SCHEMA
+
+# The app will serve the built React application
+# and the FastAPI backend
+command: |
+  # Install backend dependencies
+  pip install -r backend/requirements.txt
+
+  # Start FastAPI backend in background
+  cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+
+  # Serve React build
+  npx serve -s build -l 3000

@@ -162,12 +162,8 @@ const DataTypeMappings: React.FC = () => {
                   </TableHead>
                   <TableBody>
                     {filteredMappings.map((mapping, index) => (
-                      <motion.tr
+                      <TableRow
                         key={index}
-                        component={TableRow}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.02, duration: 0.3 }}
                         sx={{
                           '&:hover': {
                             backgroundColor: '#f5f5f5',
@@ -195,7 +191,7 @@ const DataTypeMappings: React.FC = () => {
                             {mapping.notes}
                           </Typography>
                         </TableCell>
-                      </motion.tr>
+                      </TableRow>
                     ))}
                   </TableBody>
                 </Table>
