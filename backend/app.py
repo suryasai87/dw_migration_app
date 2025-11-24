@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import os
@@ -12,7 +14,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware for React app
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,7 +26,7 @@ app.add_middleware(
 # Configuration from environment variables
 DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", "https://fe-vm-hls-amer.cloud.databricks.com")
 DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN", "")
-DATABRICKS_HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH", "/sql/1.0/warehouses/")
+DATABRICKS_HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH", "")
 LLM_AGENT_ENDPOINT = os.getenv("LLM_AGENT_ENDPOINT", "")
 
 # Request/Response Models
@@ -68,27 +70,34 @@ class CatalogSchemaResponse(BaseModel):
     catalogs: List[str]
     schemas: Dict[str, List[str]]
 
+# Mount static files (React build)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 @app.get("/")
-def read_root():
-    return {
-        "message": "DW Migration Assistant API",
-        "version": "1.0.0",
-        "endpoints": [
-            "/api/translate-sql",
-            "/api/execute-sql",
-            "/api/convert-ddl",
-            "/api/catalogs-schemas"
-        ]
-    }
+async def read_root():
+    """Serve React app"""
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "DW Migration Assistant API", "version": "1.0.0"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 @app.post("/api/translate-sql", response_model=TranslateSqlResponse)
 async def translate_sql(request: TranslateSqlRequest):
     """Translate SQL from source system to Databricks SQL using LLM agent"""
     try:
         if not LLM_AGENT_ENDPOINT:
-            raise HTTPException(status_code=500, detail="LLM Agent endpoint not configured")
+            return TranslateSqlResponse(
+                success=False,
+                translatedSql="",
+                error="LLM Agent endpoint not configured. Please set LLM_AGENT_ENDPOINT environment variable."
+            )
 
-        # Call LLM Multi-Agent Supervisor endpoint
         payload = {
             "source_system": request.sourceSystem,
             "source_sql": request.sourceSql
@@ -129,18 +138,18 @@ async def translate_sql(request: TranslateSqlRequest):
 async def execute_sql(request: ExecuteSqlRequest):
     """Execute SQL in Databricks SQL"""
     try:
-        if not DATABRICKS_TOKEN:
-            raise HTTPException(status_code=500, detail="Databricks token not configured")
+        if not DATABRICKS_TOKEN or not DATABRICKS_HTTP_PATH:
+            return ExecuteSqlResponse(
+                success=False,
+                error="Databricks credentials not configured"
+            )
 
-        # Ensure LIMIT 1 for SELECT queries
-        sql = request.sql.strip()
-        if sql.upper().startswith('SELECT') and 'LIMIT' not in sql.upper():
-            sql = f"{sql} LIMIT 1"
+        sql_text = request.sql.strip()
+        if sql_text.upper().startswith('SELECT') and 'LIMIT' not in sql_text.upper():
+            sql_text = f"{sql_text} LIMIT 1"
 
-        # Add USE statements for catalog and schema
-        full_sql = f"USE CATALOG {request.catalog}; USE SCHEMA {request.schema}; {sql}"
+        full_sql = f"USE CATALOG {request.catalog}; USE SCHEMA {request.schema}; {sql_text}"
 
-        # Execute using Databricks SQL connector
         with sql.connect(
             server_hostname=DATABRICKS_HOST.replace("https://", ""),
             http_path=DATABRICKS_HTTP_PATH,
@@ -149,15 +158,12 @@ async def execute_sql(request: ExecuteSqlRequest):
             with connection.cursor() as cursor:
                 import time
                 start_time = time.time()
-
                 cursor.execute(full_sql)
-
                 execution_time = time.time() - start_time
 
-                # Fetch results if it's a SELECT query
                 result = None
                 row_count = 0
-                if sql.upper().startswith('SELECT'):
+                if sql_text.upper().startswith('SELECT'):
                     rows = cursor.fetchall()
                     columns = [desc[0] for desc in cursor.description]
                     result = [dict(zip(columns, row)) for row in rows]
@@ -180,9 +186,12 @@ async def execute_sql(request: ExecuteSqlRequest):
 async def convert_ddl(request: ConvertDdlRequest):
     """Convert DDL from source system to Databricks SQL DDL"""
     try:
-        # Call LLM agent for DDL conversion
         if not LLM_AGENT_ENDPOINT:
-            raise HTTPException(status_code=500, detail="LLM Agent endpoint not configured")
+            return ConvertDdlResponse(
+                success=False,
+                convertedDdl="",
+                error="LLM Agent endpoint not configured"
+            )
 
         payload = {
             "source_system": request.sourceSystem,
@@ -212,7 +221,6 @@ async def convert_ddl(request: ConvertDdlRequest):
         converted_ddl = result.get("converted_ddl", "")
         warnings = result.get("warnings", [])
 
-        # Execute if requested
         executed = False
         if request.executeImmediately and converted_ddl:
             try:
@@ -245,24 +253,24 @@ async def convert_ddl(request: ConvertDdlRequest):
 async def get_catalogs_schemas():
     """Get list of Unity Catalog catalogs and schemas"""
     try:
-        if not DATABRICKS_TOKEN:
-            raise HTTPException(status_code=500, detail="Databricks token not configured")
+        if not DATABRICKS_TOKEN or not DATABRICKS_HTTP_PATH:
+            return CatalogSchemaResponse(
+                catalogs=["main"],
+                schemas={"main": ["default"]}
+            )
 
         catalogs = []
         schemas_dict = {}
 
-        # Get catalogs and schemas using Databricks SQL
         with sql.connect(
             server_hostname=DATABRICKS_HOST.replace("https://", ""),
             http_path=DATABRICKS_HTTP_PATH,
             access_token=DATABRICKS_TOKEN
         ) as connection:
             with connection.cursor() as cursor:
-                # Get catalogs
                 cursor.execute("SHOW CATALOGS")
                 catalogs = [row[0] for row in cursor.fetchall()]
 
-                # Get schemas for each catalog
                 for catalog in catalogs:
                     try:
                         cursor.execute(f"SHOW SCHEMAS IN {catalog}")
@@ -276,15 +284,10 @@ async def get_catalogs_schemas():
         )
 
     except Exception as e:
-        # Return defaults on error
         return CatalogSchemaResponse(
             catalogs=["main"],
             schemas={"main": ["default"]}
         )
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
