@@ -9,6 +9,8 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import DataTypeMappings from './components/DataTypeMappings';
+import SqlTranslator from './components/SqlTranslator';
+import DdlConverter from './components/DdlConverter';
 import QueryHistory from './components/QueryHistory';
 import Analytics from './components/Analytics';
 
@@ -38,6 +40,10 @@ function App() {
         return <Dashboard />;
       case 'dataTypeMappings':
         return <DataTypeMappings />;
+      case 'sqlTranslator':
+        return <SqlTranslator />;
+      case 'ddlConverter':
+        return <DdlConverter />;
       case 'queryHistory':
         return <QueryHistory />;
       case 'analytics':

@@ -1,0 +1,33 @@
+name: dw-migration-assistant
+description: Data Warehouse Migration Assistant for Databricks SQL
+
+# Resources configuration
+resources:
+  - name: frontend
+    subdomain: dw-migration-assistant
+    root_path: /
+
+commands:
+  # Start both frontend and backend
+  start:
+    script: |
+      # Start backend API
+      cd backend && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} &
+
+      # Start frontend
+      cd .. && npm start
+
+  # Build frontend
+  build:
+    script: |
+      npm run build
+
+env:
+  - name: DATABRICKS_HOST
+    value: ${DATABRICKS_HOST}
+  - name: DATABRICKS_TOKEN
+    value: ${DATABRICKS_TOKEN}
+  - name: REACT_APP_LLM_ENDPOINT
+    value: ${LLM_AGENT_ENDPOINT}
+  - name: PORT
+    value: ${PORT}

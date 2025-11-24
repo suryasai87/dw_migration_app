@@ -11,6 +11,8 @@ import {
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import TransformIcon from '@mui/icons-material/Transform';
+import TranslateIcon from '@mui/icons-material/Translate';
+import BuildIcon from '@mui/icons-material/Build';
 import HistoryIcon from '@mui/icons-material/History';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 
@@ -33,6 +35,16 @@ const Sidebar: React.FC<SidebarProps> = ({
       id: 'dataTypeMappings',
       label: 'Data Type Mappings',
       icon: <TransformIcon />,
+    },
+    {
+      id: 'sqlTranslator',
+      label: 'SQL Translator',
+      icon: <TranslateIcon />,
+    },
+    {
+      id: 'ddlConverter',
+      label: 'DDL Converter',
+      icon: <BuildIcon />,
     },
     { id: 'queryHistory', label: 'Query History', icon: <HistoryIcon /> },
     { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
