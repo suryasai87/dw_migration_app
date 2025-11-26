@@ -230,4 +230,58 @@ export class DatabricksService {
       };
     }
   }
+
+  static async listCatalogs(): Promise<{ catalogs: string[] }> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/catalogs'), { method: 'GET', credentials: 'include' });
+      return await response.json();
+    } catch (error) {
+      return { catalogs: [] };
+    }
+  }
+
+  static async listSchemas(catalog: string): Promise<{ schemas: string[] }> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/catalogs/${catalog}/schemas`), { method: 'GET', credentials: 'include' });
+      return await response.json();
+    } catch (error) {
+      return { schemas: [] };
+    }
+  }
+
+  static async listTables(catalog: string, schema: string): Promise<{ tables: string[] }> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/catalogs/${catalog}/schemas/${schema}/tables`), { method: 'GET', credentials: 'include' });
+      return await response.json();
+    } catch (error) {
+      return { tables: [] };
+    }
+  }
+
+  static async listColumns(catalog: string, schema: string, table: string): Promise<{ columns: any[] }> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/catalogs/${catalog}/schemas/${schema}/tables/${table}/columns`), { method: 'GET', credentials: 'include' });
+      return await response.json();
+    } catch (error) {
+      return { columns: [] };
+    }
+  }
+
+  static async suggestBusinessLogic(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/suggest-business-logic'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(request) });
+      return await response.json();
+    } catch (error) {
+      return { suggestions: [] };
+    }
+  }
+
+  static async generateSql(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/generate-sql'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(request) });
+      return await response.json();
+    } catch (error) {
+      return { success: false, generated_sql: '', error: 'Request failed' };
+    }
+  }
 }

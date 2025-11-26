@@ -13,6 +13,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import TransformIcon from '@mui/icons-material/Transform';
 import TranslateIcon from '@mui/icons-material/Translate';
 import BuildIcon from '@mui/icons-material/Build';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import HistoryIcon from '@mui/icons-material/History';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 
@@ -45,6 +46,11 @@ const Sidebar: React.FC<SidebarProps> = ({
       id: 'ddlConverter',
       label: 'DDL Converter',
       icon: <BuildIcon />,
+    },
+    {
+      id: 'queryGenerator',
+      label: 'Query Generator',
+      icon: <AutoFixHighIcon />,
     },
     { id: 'queryHistory', label: 'Query History', icon: <HistoryIcon /> },
     { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon /> },

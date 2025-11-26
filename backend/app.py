@@ -140,6 +140,30 @@ class CatalogSchemaResponse(BaseModel):
     catalogs: List[str]
     schemas: Dict[str, List[str]]
 
+class TableInfo(BaseModel):
+    catalog: str
+    schema_name: str
+    table: str
+    columns: List[str]
+
+class BusinessLogicSuggestionRequest(BaseModel):
+    catalog: str
+    schema_name: str
+    table: str
+    columns: List[str]
+    model_id: str = "databricks-llama-4-maverick"
+    additional_tables: Optional[List[TableInfo]] = None
+
+class JoinConditionSuggestionRequest(BaseModel):
+    tables: List[TableInfo]
+    model_id: str = "databricks-llama-4-maverick"
+
+class GenerateSqlRequest(BaseModel):
+    tables: List[TableInfo]
+    business_logic: str
+    model_id: str = "databricks-llama-4-maverick"
+    join_conditions: Optional[str] = None
+
 # Static files directory using pathlib (more reliable in Databricks Apps)
 from pathlib import Path
 
@@ -494,6 +518,236 @@ async def get_catalogs_schemas():
             catalogs=["main"],
             schemas={"main": ["default"]}
         )
+
+@app.get("/api/catalogs")
+async def list_catalogs():
+    """List available catalogs"""
+    try:
+        if not DATABRICKS_HOST or not DATABRICKS_TOKEN or not DATABRICKS_HTTP_PATH:
+            raise HTTPException(
+                status_code=503,
+                detail="Databricks credentials not configured"
+            )
+
+        with sql.connect(
+            server_hostname=DATABRICKS_HOST.replace("https://", ""),
+            http_path=DATABRICKS_HTTP_PATH,
+            access_token=DATABRICKS_TOKEN
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW CATALOGS")
+                catalogs = [row[0] for row in cursor.fetchall()]
+                return {"catalogs": catalogs}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list catalogs: {str(e)}")
+
+@app.get("/api/catalogs/{catalog_name}/schemas")
+async def list_schemas(catalog_name: str):
+    """List schemas in a catalog"""
+    try:
+        with sql.connect(
+            server_hostname=DATABRICKS_HOST.replace("https://", ""),
+            http_path=DATABRICKS_HTTP_PATH,
+            access_token=DATABRICKS_TOKEN
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SHOW SCHEMAS IN {catalog_name}")
+                schemas = [row[0] for row in cursor.fetchall()]
+                return {"schemas": schemas}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list schemas: {str(e)}")
+
+@app.get("/api/catalogs/{catalog_name}/schemas/{schema_name}/tables")
+async def list_tables(catalog_name: str, schema_name: str):
+    """List tables in a schema"""
+    try:
+        with sql.connect(
+            server_hostname=DATABRICKS_HOST.replace("https://", ""),
+            http_path=DATABRICKS_HTTP_PATH,
+            access_token=DATABRICKS_TOKEN
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SHOW TABLES IN {catalog_name}.{schema_name}")
+                tables = [row[1] for row in cursor.fetchall()]  # row[1] is table name
+                return {"tables": tables}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list tables: {str(e)}")
+
+@app.get("/api/catalogs/{catalog_name}/schemas/{schema_name}/tables/{table_name}/columns")
+async def list_columns(catalog_name: str, schema_name: str, table_name: str):
+    """List columns in a table"""
+    try:
+        with sql.connect(
+            server_hostname=DATABRICKS_HOST.replace("https://", ""),
+            http_path=DATABRICKS_HTTP_PATH,
+            access_token=DATABRICKS_TOKEN
+        ) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"DESCRIBE {catalog_name}.{schema_name}.{table_name}")
+                columns = [{"name": row[0], "type": row[1], "comment": row[2] if len(row) > 2 else None}
+                          for row in cursor.fetchall()]
+                return {"columns": columns}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list columns: {str(e)}")
+
+@app.post("/api/suggest-business-logic")
+async def suggest_business_logic(request: BusinessLogicSuggestionRequest):
+    """Generate business logic suggestions using Foundation Model"""
+    import time
+    import openai
+
+    start_time = time.time()
+
+    try:
+        client = openai.OpenAI(
+            api_key=DATABRICKS_TOKEN,
+            base_url=f"{DATABRICKS_HOST}/serving-endpoints"
+        )
+
+        full_table_name = f"{request.catalog}.{request.schema_name}.{request.table}"
+        context = f"Table: {full_table_name}\nColumns: {', '.join(request.columns)}"
+
+        system_prompt = """You are a helpful data analyst assistant. Generate 5 diverse business logic examples for analyzing data. Each suggestion should be a clear, natural language business question."""
+
+        user_prompt = f"""Based on this table:\n{context}\n\nGenerate 5 business logic examples. Format as numbered list (1-5)."""
+
+        response = client.chat.completions.create(
+            model=request.model_id,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=300,
+            temperature=0.7
+        )
+
+        suggestions_text = response.choices[0].message.content.strip()
+
+        import re
+        suggestions = []
+        for line in suggestions_text.split('\n'):
+            match = re.match(r'^\d+\.\s*(.+)$', line.strip())
+            if match:
+                suggestion = match.group(1).strip().strip('"').strip("'")
+                if len(suggestion) > 15:
+                    suggestions.append(suggestion)
+
+        return {
+            "suggestions": suggestions[:5],
+            "model_used": request.model_id,
+            "execution_time_ms": int((time.time() - start_time) * 1000)
+        }
+    except Exception as e:
+        return {"suggestions": [], "error": str(e)}
+
+@app.post("/api/suggest-join-conditions")
+async def suggest_join_conditions(request: JoinConditionSuggestionRequest):
+    """Suggest JOIN conditions using Foundation Model"""
+    import time
+    import openai
+
+    start_time = time.time()
+
+    try:
+        if len(request.tables) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 tables required")
+
+        client = openai.OpenAI(
+            api_key=DATABRICKS_TOKEN,
+            base_url=f"{DATABRICKS_HOST}/serving-endpoints"
+        )
+
+        tables_context = ""
+        for idx, table in enumerate(request.tables, 1):
+            full_name = f"{table.catalog}.{table.schema_name}.{table.table}"
+            tables_context += f"\nTable {idx}: {full_name}\nColumns: {', '.join(table.columns)}\n"
+
+        system_prompt = """You are a SQL expert. Suggest JOIN conditions based on column names."""
+        user_prompt = f"""Based on:\n{tables_context}\n\nSuggest 3 JOIN conditions. Format:\n1. table1.col = table2.col\n2. table1.col = table2.col\n3. table1.col = table2.col"""
+
+        response = client.chat.completions.create(
+            model=request.model_id,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=200,
+            temperature=0.3
+        )
+
+        import re
+        suggestions = []
+        for line in response.choices[0].message.content.strip().split('\n'):
+            match = re.match(r'^\d+\.\s*(.+)$', line.strip())
+            if match:
+                suggestions.append(match.group(1).strip())
+
+        return {
+            "suggestions": suggestions[:3],
+            "model_used": request.model_id,
+            "execution_time_ms": int((time.time() - start_time) * 1000)
+        }
+    except Exception as e:
+        return {"suggestions": [], "error": str(e)}
+
+@app.post("/api/generate-sql")
+async def generate_sql(request: GenerateSqlRequest):
+    """Generate SQL query from business logic using Foundation Model"""
+    import time
+    import openai
+
+    start_time = time.time()
+
+    try:
+        client = openai.OpenAI(
+            api_key=DATABRICKS_TOKEN,
+            base_url=f"{DATABRICKS_HOST}/serving-endpoints"
+        )
+
+        tables_context = ""
+        for table in request.tables:
+            full_name = f"{table.catalog}.{table.schema_name}.{table.table}"
+            tables_context += f"\nTable: {full_name}\nColumns: {', '.join(table.columns)}\n"
+
+        join_info = f"\nJOIN conditions: {request.join_conditions}" if request.join_conditions else ""
+        user_prompt = f"""Tables:\n{tables_context}{join_info}\n\nBusiness Logic: {request.business_logic}\n\nGenerate Databricks SQL (no explanations)."""
+
+        response = client.chat.completions.create(
+            model=request.model_id,
+            messages=[
+                {"role": "system", "content": "You are a SQL expert. Generate optimized Databricks SQL."},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=1000,
+            temperature=0.1
+        )
+
+        generated_sql = response.choices[0].message.content.strip()
+        if generated_sql.startswith("```sql"):
+            generated_sql = generated_sql[6:]
+        if generated_sql.startswith("```"):
+            generated_sql = generated_sql[3:]
+        if generated_sql.endswith("```"):
+            generated_sql = generated_sql[:-3]
+        generated_sql = generated_sql.strip()
+
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+
+        return {
+            "success": True,
+            "generated_sql": generated_sql,
+            "model_used": request.model_id,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "estimated_cost": calculate_llm_cost(request.model_id, prompt_tokens, completion_tokens),
+            "execution_time_ms": int((time.time() - start_time) * 1000)
+        }
+    except Exception as e:
+        return {"success": False, "generated_sql": "", "error": str(e)}
 
 # Serve other static files (favicon, manifest, etc.)
 @app.get("/favicon.ico")

@@ -11,6 +11,7 @@ import Dashboard from './components/Dashboard';
 import DataTypeMappings from './components/DataTypeMappings';
 import SqlTranslator from './components/SqlTranslator';
 import DdlConverter from './components/DdlConverter';
+import QueryGenerator from './components/QueryGenerator';
 import QueryHistory from './components/QueryHistory';
 import Analytics from './components/Analytics';
 
@@ -44,6 +45,8 @@ function App() {
         return <SqlTranslator />;
       case 'ddlConverter':
         return <DdlConverter />;
+      case 'queryGenerator':
+        return <QueryGenerator />;
       case 'queryHistory':
         return <QueryHistory />;
       case 'analytics':
