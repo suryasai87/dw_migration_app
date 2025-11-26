@@ -29,13 +29,31 @@ import { DatabricksService } from '../services/databricksService';
 
 const SqlTranslator: React.FC = () => {
   const [selectedSource, setSelectedSource] = useState('');
+  const [selectedModel, setSelectedModel] = useState('databricks-llama-4-maverick');
+  const [availableModels, setAvailableModels] = useState<any[]>([]);
   const [sourceSql, setSourceSql] = useState('');
   const [translatedSql, setTranslatedSql] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [translationError, setTranslationError] = useState<string | null>(null);
+  const [translationMetrics, setTranslationMetrics] = useState<any>(null);
   const [executionResult, setExecutionResult] = useState<any>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
+
+  // Load available models
+  React.useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const response = await DatabricksService.listModels();
+        if (response.models) {
+          setAvailableModels(response.models);
+        }
+      } catch (error) {
+        console.error('Failed to load models:', error);
+      }
+    };
+    loadModels();
+  }, []);
 
   const handleTranslate = async () => {
     if (!selectedSource || !sourceSql.trim()) {
@@ -45,6 +63,7 @@ const SqlTranslator: React.FC = () => {
 
     setIsTranslating(true);
     setTranslationError(null);
+    setTranslationMetrics(null);
     setExecutionResult(null);
     setExecutionError(null);
 
@@ -52,10 +71,19 @@ const SqlTranslator: React.FC = () => {
       const response = await DatabricksService.translateSql({
         sourceSystem: selectedSource,
         sourceSql: sourceSql,
+        modelId: selectedModel,
       });
 
       if (response.success) {
         setTranslatedSql(response.translatedSql);
+        setTranslationMetrics({
+          modelUsed: response.modelUsed,
+          promptTokens: response.promptTokens,
+          completionTokens: response.completionTokens,
+          totalTokens: response.totalTokens,
+          estimatedCost: response.estimatedCost,
+          executionTimeMs: response.executionTimeMs,
+        });
       } else {
         setTranslationError(response.error || 'Translation failed');
       }
@@ -115,21 +143,47 @@ const SqlTranslator: React.FC = () => {
 
         <Card sx={{ mb: 3 }}>
           <CardContent>
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel id="source-select-label">Source Data Warehouse</InputLabel>
-              <Select
-                labelId="source-select-label"
-                value={selectedSource}
-                label="Source Data Warehouse"
-                onChange={(e) => setSelectedSource(e.target.value)}
-              >
-                {sourceSystemOptions.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="source-select-label">Source Data Warehouse</InputLabel>
+                  <Select
+                    labelId="source-select-label"
+                    value={selectedSource}
+                    label="Source Data Warehouse"
+                    onChange={(e) => setSelectedSource(e.target.value)}
+                  >
+                    {sourceSystemOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="model-select-label">AI Model</InputLabel>
+                  <Select
+                    labelId="model-select-label"
+                    value={selectedModel}
+                    label="AI Model"
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                  >
+                    {availableModels.map((model) => (
+                      <MenuItem key={model.id} value={model.id}>
+                        <Box>
+                          <Typography variant="body1">{model.name}</Typography>
+                          <Typography variant="caption" color="textSecondary">
+                            {model.description}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
           </CardContent>
         </Card>
 
@@ -237,6 +291,64 @@ const SqlTranslator: React.FC = () => {
             <Alert severity="error" sx={{ mt: 3 }} onClose={() => setTranslationError(null)}>
               {translationError}
             </Alert>
+          </motion.div>
+        )}
+
+        {/* Translation Metrics */}
+        {translationMetrics && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <Paper sx={{ p: 3, mt: 3, backgroundColor: '#f0f4ff' }}>
+              <Typography variant="h6" gutterBottom sx={{ color: '#1976d2' }}>
+                Translation Metrics
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="body2" color="textSecondary">
+                    Model Used
+                  </Typography>
+                  <Typography variant="body1" fontWeight="medium">
+                    {availableModels.find(m => m.id === translationMetrics.modelUsed)?.name || translationMetrics.modelUsed}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Total Tokens
+                  </Typography>
+                  <Typography variant="h6">{translationMetrics.totalTokens?.toLocaleString() || 'N/A'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Input Tokens
+                  </Typography>
+                  <Typography variant="body1">{translationMetrics.promptTokens?.toLocaleString() || 'N/A'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Output Tokens
+                  </Typography>
+                  <Typography variant="body1">{translationMetrics.completionTokens?.toLocaleString() || 'N/A'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Estimated Cost
+                  </Typography>
+                  <Typography variant="h6" sx={{ color: '#4CAF50' }}>
+                    ${translationMetrics.estimatedCost?.toFixed(6) || '0.000000'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={1}>
+                  <Typography variant="body2" color="textSecondary">
+                    Time (ms)
+                  </Typography>
+                  <Typography variant="body1">{translationMetrics.executionTimeMs || 'N/A'}</Typography>
+                </Grid>
+              </Grid>
+            </Paper>
           </motion.div>
         )}
 

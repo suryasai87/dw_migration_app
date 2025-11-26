@@ -3,6 +3,7 @@ import { apiConfig, getApiEndpoint } from '../config/apiConfig';
 export interface TranslateSqlRequest {
   sourceSystem: string;
   sourceSql: string;
+  modelId?: string;
 }
 
 export interface TranslateSqlResponse {
@@ -10,6 +11,12 @@ export interface TranslateSqlResponse {
   translatedSql: string;
   error?: string;
   warnings?: string[];
+  modelUsed?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: number;
+  executionTimeMs?: number;
 }
 
 export interface ExecuteSqlRequest {
@@ -167,6 +174,59 @@ export class DatabricksService {
       return {
         catalogs: [apiConfig.defaultCatalog],
         schemas: { [apiConfig.defaultCatalog]: [apiConfig.defaultSchema] },
+      };
+    }
+  }
+
+  /**
+   * Get list of available Foundation Models
+   */
+  static async listModels(): Promise<{ models: any[] }> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/models'), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      return { models: [] };
+    }
+  }
+
+  /**
+   * Get SQL warehouse status
+   */
+  static async getWarehouseStatus(): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/warehouse-status'), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching warehouse status:', error);
+      return {
+        warehouse_id: null,
+        warehouse_name: 'Unknown',
+        status: 'ERROR',
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

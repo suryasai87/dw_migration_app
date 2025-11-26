@@ -26,19 +26,89 @@ app.add_middleware(
 # Configuration from environment variables
 DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", "https://fe-vm-hls-amer.cloud.databricks.com")
 DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN", "")
-DATABRICKS_HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH", "")
+DATABRICKS_HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH", "/sql/1.0/warehouses/4b28691c780d9875")  # Serverless Starter Warehouse
 LLM_AGENT_ENDPOINT = os.getenv("LLM_AGENT_ENDPOINT", "")
+
+# Available Foundation Models
+AVAILABLE_MODELS = {
+    "llama-maverick": {
+        "id": "databricks-llama-4-maverick",
+        "name": "Llama 4 Maverick",
+        "description": "Fast and efficient for general tasks (Default)",
+        "pricing": {"input": 0.15, "output": 0.60}
+    },
+    "llama-70b": {
+        "id": "databricks-meta-llama-3-3-70b-instruct",
+        "name": "Llama 3.3 70B",
+        "description": "Powerful model for complex reasoning",
+        "pricing": {"input": 0.20, "output": 0.80}
+    },
+    "llama-405b": {
+        "id": "databricks-meta-llama-3-1-405b-instruct",
+        "name": "Llama 3.1 405B",
+        "description": "Largest Llama model for most complex tasks",
+        "pricing": {"input": 0.50, "output": 2.00}
+    },
+    "claude-sonnet-4-5": {
+        "id": "databricks-claude-sonnet-4-5",
+        "name": "Claude Sonnet 4.5",
+        "description": "Latest Claude model with superior reasoning",
+        "pricing": {"input": 3.00, "output": 15.00}
+    },
+    "claude-opus-4-1": {
+        "id": "databricks-claude-opus-4-1",
+        "name": "Claude Opus 4.1",
+        "description": "Most powerful Claude model",
+        "pricing": {"input": 15.00, "output": 75.00}
+    },
+    "gpt-5": {
+        "id": "databricks-gpt-5",
+        "name": "GPT-5",
+        "description": "Latest OpenAI model",
+        "pricing": {"input": 2.50, "output": 10.00}
+    },
+    "gemini-2-5-pro": {
+        "id": "databricks-gemini-2-5-pro",
+        "name": "Gemini 2.5 Pro",
+        "description": "Google's most capable model",
+        "pricing": {"input": 1.25, "output": 5.00}
+    }
+}
+
+def calculate_llm_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """Calculate estimated cost in USD for LLM usage"""
+    # Find pricing for the model
+    pricing = None
+    for model_key, model_info in AVAILABLE_MODELS.items():
+        if model_info["id"] == model_id:
+            pricing = model_info["pricing"]
+            break
+
+    if not pricing:
+        # Default pricing if model not found
+        pricing = {"input": 0.15, "output": 0.60}
+
+    input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
+    output_cost = (completion_tokens / 1_000_000) * pricing["output"]
+    return input_cost + output_cost
 
 # Request/Response Models
 class TranslateSqlRequest(BaseModel):
     sourceSystem: str
     sourceSql: str
+    modelId: Optional[str] = "databricks-llama-4-maverick"
 
 class TranslateSqlResponse(BaseModel):
     success: bool
     translatedSql: str
     error: Optional[str] = None
     warnings: Optional[List[str]] = None
+    modelUsed: Optional[str] = None
+    promptTokens: Optional[int] = None
+    completionTokens: Optional[int] = None
+    totalTokens: Optional[int] = None
+    estimatedCost: Optional[float] = None
+    executionTimeMs: Optional[int] = None
 
 class ExecuteSqlRequest(BaseModel):
     sql: str
@@ -124,51 +194,150 @@ async def debug_info():
         "static_files": sorted([f.name for f in static_dir.iterdir()])[:30] if static_dir.exists() else []
     }
 
+@app.get("/api/models")
+async def list_models():
+    """List available foundation models"""
+    return {"models": list(AVAILABLE_MODELS.values())}
+
+@app.get("/api/warehouse-status")
+async def get_warehouse_status():
+    """Get SQL warehouse status"""
+    try:
+        # Extract warehouse ID from HTTP path
+        warehouse_id = DATABRICKS_HTTP_PATH.split("/")[-1] if DATABRICKS_HTTP_PATH else None
+
+        if not warehouse_id:
+            return {
+                "warehouse_id": None,
+                "warehouse_name": "Not configured",
+                "status": "UNKNOWN",
+                "http_path": DATABRICKS_HTTP_PATH
+            }
+
+        # Try to connect to get warehouse info
+        try:
+            with sql.connect(
+                server_hostname=DATABRICKS_HOST.replace("https://", ""),
+                http_path=DATABRICKS_HTTP_PATH,
+                access_token=DATABRICKS_TOKEN
+            ) as connection:
+                # Connection successful means warehouse is running
+                return {
+                    "warehouse_id": warehouse_id,
+                    "warehouse_name": f"Warehouse {warehouse_id}",
+                    "status": "RUNNING",
+                    "http_path": DATABRICKS_HTTP_PATH
+                }
+        except Exception as conn_error:
+            return {
+                "warehouse_id": warehouse_id,
+                "warehouse_name": f"Warehouse {warehouse_id}",
+                "status": "STOPPED",
+                "http_path": DATABRICKS_HTTP_PATH,
+                "error": str(conn_error)
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get warehouse status: {str(e)}")
+
 @app.post("/api/translate-sql", response_model=TranslateSqlResponse)
 async def translate_sql(request: TranslateSqlRequest):
-    """Translate SQL from source system to Databricks SQL using LLM agent"""
+    """Translate SQL from source system to Databricks SQL using Foundation Model"""
+    import time
+    import openai
+
+    start_time = time.time()
+
     try:
-        if not LLM_AGENT_ENDPOINT:
+        # Check if credentials are configured
+        if not DATABRICKS_HOST or not DATABRICKS_TOKEN:
             return TranslateSqlResponse(
                 success=False,
                 translatedSql="",
-                error="LLM Agent endpoint not configured. Please set LLM_AGENT_ENDPOINT environment variable."
+                error="Databricks credentials not configured. Please set DATABRICKS_HOST and DATABRICKS_TOKEN."
             )
 
-        payload = {
-            "source_system": request.sourceSystem,
-            "source_sql": request.sourceSql
-        }
-
-        response = requests.post(
-            LLM_AGENT_ENDPOINT,
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {DATABRICKS_TOKEN}",
-                "Content-Type": "application/json"
-            },
-            timeout=60
+        # Initialize OpenAI client with Databricks endpoint
+        client = openai.OpenAI(
+            api_key=DATABRICKS_TOKEN,
+            base_url=f"{DATABRICKS_HOST}/serving-endpoints"
         )
 
-        if response.status_code == 200:
-            result = response.json()
-            return TranslateSqlResponse(
-                success=True,
-                translatedSql=result.get("translated_sql", ""),
-                warnings=result.get("warnings", [])
-            )
-        else:
-            return TranslateSqlResponse(
-                success=False,
-                translatedSql="",
-                error=f"LLM API error: {response.text}"
-            )
+        # Create prompt for SQL translation
+        system_prompt = f"""You are an expert SQL translator specializing in migrating SQL from {request.sourceSystem} to Databricks SQL.
+
+Your task is to:
+1. Analyze the input SQL from {request.sourceSystem}
+2. Convert it to valid Databricks SQL syntax
+3. Handle dialect-specific functions, data types, and syntax differences
+4. Preserve the original logic and intent
+5. Add comments for significant changes
+
+Important considerations:
+- Use Databricks SQL functions and syntax
+- Handle data type conversions correctly
+- Preserve column names and aliases
+- Maintain query structure and joins
+- Use appropriate Databricks-specific optimizations where applicable"""
+
+        user_prompt = f"""Translate the following {request.sourceSystem} SQL to Databricks SQL:
+
+```sql
+{request.sourceSql}
+```
+
+Provide ONLY the translated Databricks SQL without explanations. If there are important conversion notes, add them as SQL comments."""
+
+        # Call Databricks Foundation Model
+        response = client.chat.completions.create(
+            model=request.modelId,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=2000,
+            temperature=0.1  # Low temperature for more deterministic translations
+        )
+
+        translated_sql = response.choices[0].message.content.strip()
+
+        # Remove markdown code blocks if present
+        if translated_sql.startswith("```sql"):
+            translated_sql = translated_sql[6:]
+        if translated_sql.startswith("```"):
+            translated_sql = translated_sql[3:]
+        if translated_sql.endswith("```"):
+            translated_sql = translated_sql[:-3]
+        translated_sql = translated_sql.strip()
+
+        # Extract token usage
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+        total_tokens = response.usage.total_tokens if response.usage else 0
+
+        # Calculate cost
+        estimated_cost = calculate_llm_cost(request.modelId, prompt_tokens, completion_tokens)
+
+        # Calculate execution time
+        execution_time_ms = int((time.time() - start_time) * 1000)
+
+        return TranslateSqlResponse(
+            success=True,
+            translatedSql=translated_sql,
+            modelUsed=request.modelId,
+            promptTokens=prompt_tokens,
+            completionTokens=completion_tokens,
+            totalTokens=total_tokens,
+            estimatedCost=estimated_cost,
+            executionTimeMs=execution_time_ms
+        )
 
     except Exception as e:
+        execution_time_ms = int((time.time() - start_time) * 1000)
         return TranslateSqlResponse(
             success=False,
             translatedSql="",
-            error=str(e)
+            error=f"Translation failed: {str(e)}",
+            executionTimeMs=execution_time_ms
         )
 
 @app.post("/api/execute-sql", response_model=ExecuteSqlResponse)

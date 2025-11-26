@@ -2,7 +2,5 @@ command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 port: 8000
 environment_variables:
   PYTHONPATH: "."
-  DATABRICKS_HOST: "${DATABRICKS_HOST}"
-  DATABRICKS_TOKEN: "${DATABRICKS_TOKEN}"
-  DATABRICKS_HTTP_PATH: "${DATABRICKS_HTTP_PATH}"
-  LLM_AGENT_ENDPOINT: "${LLM_AGENT_ENDPOINT}"
+  DATABRICKS_HOST: "https://fe-vm-hls-amer.cloud.databricks.com"
+  DATABRICKS_HTTP_PATH: "/sql/1.0/warehouses/4b28691c780d9875"
