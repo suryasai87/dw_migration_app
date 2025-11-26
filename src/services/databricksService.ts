@@ -284,4 +284,18 @@ export class DatabricksService {
       return { success: false, generated_sql: '', error: 'Request failed' };
     }
   }
+
+  static async suggestJoinConditions(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/suggest-join-conditions'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return { suggestions: [], error: 'Request failed' };
+    }
+  }
 }

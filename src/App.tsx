@@ -12,6 +12,7 @@ import DataTypeMappings from './components/DataTypeMappings';
 import SqlTranslator from './components/SqlTranslator';
 import DdlConverter from './components/DdlConverter';
 import QueryGenerator from './components/QueryGenerator';
+import MultiTableJoinGenerator from './components/MultiTableJoinGenerator';
 import QueryHistory from './components/QueryHistory';
 import Analytics from './components/Analytics';
 
@@ -47,6 +48,8 @@ function App() {
         return <DdlConverter />;
       case 'queryGenerator':
         return <QueryGenerator />;
+      case 'multiTableJoin':
+        return <MultiTableJoinGenerator />;
       case 'queryHistory':
         return <QueryHistory />;
       case 'analytics':

@@ -3,6 +3,7 @@ import { Container, Typography, Box, Grid, Paper, TextField, Button, FormControl
 import { motion } from 'framer-motion';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { DatabricksService } from '../services/databricksService';
 
 const QueryGenerator: React.FC = () => {
@@ -20,14 +21,32 @@ const QueryGenerator: React.FC = () => {
   const [generatedSql, setGeneratedSql] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingCatalogs, setIsLoadingCatalogs] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<any>(null);
 
+  const loadCatalogs = async () => {
+    setIsLoadingCatalogs(true);
+    setError(null);
+    try {
+      const [catalogsRes, modelsRes] = await Promise.all([
+        DatabricksService.listCatalogs(),
+        DatabricksService.listModels()
+      ]);
+      setCatalogs(catalogsRes.catalogs || []);
+      setAvailableModels(modelsRes.models || []);
+      if (!catalogsRes.catalogs || catalogsRes.catalogs.length === 0) {
+        setError('No catalogs found. Please check your Unity Catalog permissions.');
+      }
+    } catch (err) {
+      console.error('Error loading initial data:', err);
+      setError('Failed to load catalogs. Please check your connection and permissions.');
+    }
+    setIsLoadingCatalogs(false);
+  };
+
   useEffect(() => {
-    Promise.all([
-      DatabricksService.listCatalogs().then(r => setCatalogs(r.catalogs || [])),
-      DatabricksService.listModels().then(r => setAvailableModels(r.models || []))
-    ]);
+    loadCatalogs();
   }, []);
 
   useEffect(() => { if (selectedCatalog) DatabricksService.listSchemas(selectedCatalog).then(r => setSchemas(r.schemas || [])); }, [selectedCatalog]);
@@ -81,11 +100,18 @@ const QueryGenerator: React.FC = () => {
 
         <Card sx={{ mb: 3 }}>
           <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="subtitle1">Select Data Source</Typography>
+              <Button size="small" onClick={loadCatalogs} disabled={isLoadingCatalogs} startIcon={isLoadingCatalogs ? <CircularProgress size={16} /> : <RefreshIcon />}>
+                {isLoadingCatalogs ? 'Loading...' : 'Refresh Catalogs'}
+              </Button>
+            </Box>
             <Grid container spacing={2}>
               <Grid item xs={12} md={3}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Catalog</InputLabel>
-                  <Select value={selectedCatalog} label="Catalog" onChange={(e) => setSelectedCatalog(e.target.value)}>
+                  <Select value={selectedCatalog} label="Catalog" onChange={(e) => setSelectedCatalog(e.target.value)} disabled={isLoadingCatalogs}>
+                    {catalogs.length === 0 && <MenuItem value="" disabled>No catalogs available</MenuItem>}
                     {catalogs.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                   </Select>
                 </FormControl>
