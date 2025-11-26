@@ -365,4 +365,347 @@ export class DatabricksService {
       return { history: [] };
     }
   }
+
+  // Migration Progress Tracking APIs
+  static async startMigration(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/migrate/start'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to start migration' };
+    }
+  }
+
+  static async getMigrationProgress(jobId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/migrate/progress/${jobId}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to get migration progress');
+    }
+  }
+
+  static async cancelMigration(jobId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/migrate/cancel/${jobId}`), {
+        method: 'POST',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to cancel migration' };
+    }
+  }
+
+  static async deleteMigrationJob(jobId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/migrate/jobs/${jobId}`), {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to delete migration job' };
+    }
+  }
+
+  static async listMigrationJobs(): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/migrate/jobs'), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { jobs: [] };
+    }
+  }
+
+  // Query Testing APIs
+  static async testQuery(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/test/query'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        query: request.query,
+        syntax_valid: false,
+        execution_status: 'error',
+        error_message: error instanceof Error ? error.message : 'Test failed'
+      };
+    }
+  }
+
+  static async testBatchQueries(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/test/batch'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Batch test failed'
+      };
+    }
+  }
+
+  static async getTestResults(jobId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/test/results/${jobId}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get results'
+      };
+    }
+  }
+
+  static async compareQueryResults(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/test/compare-results'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        row_count_match: false,
+        data_match: false,
+        error_message: error instanceof Error ? error.message : 'Comparison failed'
+      };
+    }
+  }
+
+  // Scheduling APIs
+  static async createSchedule(schedule: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/schedule/create'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ schedule })
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to create schedule' };
+    }
+  }
+
+  static async listSchedules(): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/schedule/list'), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, schedules: [], total: 0 };
+    }
+  }
+
+  static async getSchedule(jobId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/schedule/${jobId}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to get schedule' };
+    }
+  }
+
+  static async updateSchedule(jobId: string, updates: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/schedule/${jobId}`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updates)
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to update schedule' };
+    }
+  }
+
+  static async deleteSchedule(jobId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/schedule/${jobId}`), {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to delete schedule' };
+    }
+  }
+
+  static async runScheduleNow(jobId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/schedule/${jobId}/run-now`), {
+        method: 'POST',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to run schedule' };
+    }
+  }
+
+  static async getJobHistory(jobId?: string, limit: number = 50): Promise<any> {
+    try {
+      const params = new URLSearchParams();
+      if (jobId) params.append('job_id', jobId);
+      params.append('limit', limit.toString());
+
+      const response = await fetch(getApiEndpoint(`/api/schedule/executions/history?${params}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, executions: [], total: 0 };
+    }
+  }
+
+  static async getExecutionDetails(executionId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/schedule/executions/${executionId}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to get execution details' };
+    }
+  }
+
+  // Schema Comparison APIs
+  static async compareSchemas(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/compare/schemas'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        source_info: {},
+        target_info: {},
+        summary: {},
+        error: error instanceof Error ? error.message : 'Schema comparison failed'
+      };
+    }
+  }
+
+  static async compareTableStructure(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/compare/tables/${request.source_table}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Table comparison failed'
+      };
+    }
+  }
+
+  static async getDataTypeMappings(sourceSystem: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/compare/data-types?source_system=${sourceSystem}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { source_system: sourceSystem, mappings: [] };
+    }
+  }
+
+  // Cost Estimation APIs
+  static async estimateMigrationCost(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/estimate/migration'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Cost estimation failed' };
+    }
+  }
+
+  static async estimateStorageCost(dataSizeGb: number, months: number = 12): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/estimate/storage?data_size_gb=${dataSizeGb}&months=${months}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Storage cost estimation failed' };
+    }
+  }
+
+  static async estimateComputeCost(warehouseSize: string, hours: number): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint(`/api/estimate/compute?warehouse_size=${warehouseSize}&hours=${hours}`), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Compute cost estimation failed' };
+    }
+  }
+
+  static async compareCosts(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/estimate/compare'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Cost comparison failed' };
+    }
+  }
 }

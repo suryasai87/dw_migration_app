@@ -14,8 +14,13 @@ import DdlConverter from './components/DdlConverter';
 import QueryGenerator from './components/QueryGenerator';
 import MultiTableJoinGenerator from './components/MultiTableJoinGenerator';
 import ConnectAndMigrate from './components/ConnectAndMigrate';
+import MigrationScheduler from './components/MigrationScheduler';
 import QueryHistory from './components/QueryHistory';
 import Analytics from './components/Analytics';
+import QueryTesting from './components/QueryTesting';
+import SchemaComparison from './components/SchemaComparison';
+import RollbackManager from './components/RollbackManager';
+import CostEstimator from './components/CostEstimator';
 
 const theme = createTheme({
   palette: {
@@ -53,10 +58,20 @@ function App() {
         return <MultiTableJoinGenerator />;
       case 'connectAndMigrate':
         return <ConnectAndMigrate />;
+      case 'costEstimator':
+        return <CostEstimator />;
+      case 'schemaComparison':
+        return <SchemaComparison />;
+      case 'queryTesting':
+        return <QueryTesting />;
+      case 'scheduler':
+        return <MigrationScheduler />;
       case 'queryHistory':
         return <QueryHistory />;
       case 'analytics':
         return <Analytics />;
+      case 'rollback':
+        return <RollbackManager />;
       default:
         return <Dashboard />;
     }

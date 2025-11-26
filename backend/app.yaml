@@ -2,5 +2,10 @@ command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 port: 8000
 environment_variables:
   PYTHONPATH: "."
-  DATABRICKS_HOST: "https://fe-vm-hls-amer.cloud.databricks.com"
-  DATABRICKS_HTTP_PATH: "/sql/1.0/warehouses/4b28691c780d9875"
+  # Required: Your Databricks Workspace URL (replace with your workspace)
+  DATABRICKS_HOST: "https://YOUR_WORKSPACE.cloud.databricks.com"
+  # Required: SQL Warehouse HTTP Path (find in SQL Warehouses > Connection Details)
+  DATABRICKS_HTTP_PATH: "/sql/1.0/warehouses/YOUR_WAREHOUSE_ID"
+  # Optional: Default Unity Catalog settings
+  # DEFAULT_CATALOG: "main"
+  # DEFAULT_SCHEMA: "default"

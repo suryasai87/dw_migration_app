@@ -16,6 +16,7 @@ import TransformIcon from '@mui/icons-material/Transform';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DownloadIcon from '@mui/icons-material/Download';
 import { DatabricksService } from '../services/databricksService';
+import MigrationProgress from './MigrationProgress';
 
 interface ConnectionConfig {
   source_type: string;
@@ -72,6 +73,7 @@ const ConnectAndMigrate: React.FC = () => {
   const [dryRun, setDryRun] = useState(true);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationResults, setMigrationResults] = useState<any>(null);
+  const [migrationJobId, setMigrationJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -162,8 +164,10 @@ const ConnectAndMigrate: React.FC = () => {
     setIsMigrating(true);
     setError(null);
     setMigrationResults(null);
+    setMigrationJobId(null);
+
     try {
-      const result = await DatabricksService.runBulkMigration({
+      const result = await DatabricksService.startMigration({
         inventory_path: inventoryPath,
         target_catalog: targetCatalog,
         target_schema: targetSchema,
@@ -173,15 +177,30 @@ const ConnectAndMigrate: React.FC = () => {
       });
 
       if (result.success) {
-        setMigrationResults(result);
-        setSuccessMessage(`Migration ${dryRun ? 'dry run' : ''} completed! ${result.successful_migrations}/${result.total_objects} objects migrated successfully`);
+        setMigrationJobId(result.job_id);
+        setSuccessMessage(`Migration started! Job ID: ${result.job_id}`);
         setActiveStep(3);
       } else {
-        setError(result.error || 'Migration failed');
+        setError(result.error || 'Failed to start migration');
+        setIsMigrating(false);
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to run migration');
+      setError(e.message || 'Failed to start migration');
+      setIsMigrating(false);
     }
+  };
+
+  const handleMigrationComplete = (success: boolean) => {
+    setIsMigrating(false);
+    if (success) {
+      setSuccessMessage(`Migration ${dryRun ? 'dry run' : ''} completed successfully!`);
+    } else {
+      setError('Migration failed or was cancelled');
+    }
+  };
+
+  const handleMigrationCancel = () => {
+    setSuccessMessage('Migration cancelled by user');
     setIsMigrating(false);
   };
 
@@ -499,94 +518,26 @@ const ConnectAndMigrate: React.FC = () => {
     </Card>
   );
 
-  const renderMigrationResults = () => (
-    <Card sx={{ mb: 3 }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>Migration Results</Typography>
+  const renderMigrationResults = () => {
+    if (!migrationJobId) {
+      return (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Migration Results</Typography>
+            <Alert severity="info">Run a migration to see real-time progress</Alert>
+          </CardContent>
+        </Card>
+      );
+    }
 
-        {!migrationResults ? (
-          <Alert severity="info">Run a migration to see results</Alert>
-        ) : (
-          <>
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={6} md={3}>
-                <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#e8f5e9' }}>
-                  <Typography variant="h4" color="success.main">{migrationResults.successful_migrations}</Typography>
-                  <Typography variant="body2">Successful</Typography>
-                </Paper>
-              </Grid>
-              <Grid item xs={6} md={3}>
-                <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#ffebee' }}>
-                  <Typography variant="h4" color="error.main">{migrationResults.failed_migrations}</Typography>
-                  <Typography variant="body2">Failed</Typography>
-                </Paper>
-              </Grid>
-              <Grid item xs={6} md={3}>
-                <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#e3f2fd' }}>
-                  <Typography variant="h4" color="primary.main">{migrationResults.total_objects}</Typography>
-                  <Typography variant="body2">Total Objects</Typography>
-                </Paper>
-              </Grid>
-              <Grid item xs={6} md={3}>
-                <Paper sx={{ p: 2, textAlign: 'center', backgroundColor: '#fff3e0' }}>
-                  <Typography variant="h4" color="warning.main">
-                    {((migrationResults.successful_migrations / migrationResults.total_objects) * 100).toFixed(0)}%
-                  </Typography>
-                  <Typography variant="body2">Success Rate</Typography>
-                </Paper>
-              </Grid>
-            </Grid>
-
-            {migrationResults.error_log_path && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                Error log saved to: {migrationResults.error_log_path}
-              </Alert>
-            )}
-
-            {migrationResults.migration_details && migrationResults.migration_details.length > 0 && (
-              <Accordion>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography>Migration Details ({migrationResults.migration_details.length} items)</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
-                    <Table size="small" stickyHeader>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Object Name</TableCell>
-                          <TableCell>Type</TableCell>
-                          <TableCell>Status</TableCell>
-                          <TableCell>Message</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {migrationResults.migration_details.map((detail: any, idx: number) => (
-                          <TableRow key={idx}>
-                            <TableCell>{detail.object_name}</TableCell>
-                            <TableCell>{detail.object_type}</TableCell>
-                            <TableCell>
-                              <Chip
-                                size="small"
-                                label={detail.status}
-                                color={detail.status === 'success' ? 'success' : 'error'}
-                              />
-                            </TableCell>
-                            <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {detail.message}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </AccordionDetails>
-              </Accordion>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
+    return (
+      <MigrationProgress
+        jobId={migrationJobId}
+        onComplete={handleMigrationComplete}
+        onCancel={handleMigrationCancel}
+      />
+    );
+  };
 
   return (
     <Container maxWidth="lg">

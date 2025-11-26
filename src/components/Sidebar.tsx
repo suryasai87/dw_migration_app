@@ -16,8 +16,13 @@ import BuildIcon from '@mui/icons-material/Build';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import JoinInnerIcon from '@mui/icons-material/JoinInner';
 import CloudSyncIcon from '@mui/icons-material/CloudSync';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import HistoryIcon from '@mui/icons-material/History';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
+import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import RestoreIcon from '@mui/icons-material/Restore';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 
 interface SidebarProps {
   drawerOpen: boolean;
@@ -63,6 +68,31 @@ const Sidebar: React.FC<SidebarProps> = ({
       id: 'connectAndMigrate',
       label: 'Connect & Migrate',
       icon: <CloudSyncIcon />,
+    },
+    {
+      id: 'costEstimator',
+      label: 'Cost Estimator',
+      icon: <MonetizationOnIcon />,
+    },
+    {
+      id: 'schemaComparison',
+      label: 'Schema Comparison',
+      icon: <CompareArrowsIcon />,
+    },
+    {
+      id: 'queryTesting',
+      label: 'Query Testing',
+      icon: <PlaylistAddCheckIcon />,
+    },
+    {
+      id: 'scheduler',
+      label: 'Migration Scheduler',
+      icon: <ScheduleIcon />,
+    },
+    {
+      id: 'rollback',
+      label: 'Rollback Manager',
+      icon: <RestoreIcon />,
     },
     { id: 'queryHistory', label: 'Query History', icon: <HistoryIcon /> },
     { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
