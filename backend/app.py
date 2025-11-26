@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import os
@@ -70,22 +70,59 @@ class CatalogSchemaResponse(BaseModel):
     catalogs: List[str]
     schemas: Dict[str, List[str]]
 
-# Mount static files (React build)
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+# Static files directory using pathlib (more reliable in Databricks Apps)
+from pathlib import Path
 
-@app.get("/")
-async def read_root():
-    """Serve React app"""
-    index_path = os.path.join(static_dir, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"message": "DW Migration Assistant API", "version": "1.0.0"}
+static_dir = Path(__file__).parent / "static"
 
+# Mount static files for React app assets (CSS, JS, images)
+if static_dir.exists():
+    # Mount the static subdirectory for JS/CSS bundles (Create React App structure)
+    static_assets = static_dir / "static"
+    if static_assets.exists():
+        app.mount("/static", StaticFiles(directory=static_assets), name="static")
+
+@app.get("/api/health")
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "version": "1.0.0"}
+
+@app.get("/api/debug")
+async def debug_info():
+    """Debug endpoint to check runtime environment"""
+    current_file = Path(__file__).resolve()
+    current_dir = current_file.parent
+    cwd = Path.cwd()
+
+    # Test all possible paths
+    path_checks = {}
+    test_paths = [
+        ("Path(__file__).parent / static", current_dir / "static"),
+        ("Path.cwd() / static", cwd / "static"),
+        ("Path('static').resolve()", Path("static").resolve()),
+    ]
+
+    for name, path in test_paths:
+        path_checks[name] = {
+            "path": str(path),
+            "exists": path.exists(),
+            "is_dir": path.is_dir() if path.exists() else False,
+            "has_index": (path / "index.html").exists() if path.exists() else False,
+            "has_static_subdir": (path / "static").exists() if path.exists() else False
+        }
+
+    return {
+        "cwd": str(cwd),
+        "current_file": str(current_file),
+        "current_dir": str(current_dir),
+        "static_dir": str(static_dir),
+        "static_dir_exists": static_dir.exists(),
+        "static_assets_exists": (static_dir / "static").exists() if static_dir.exists() else False,
+        "path_checks": path_checks,
+        "files_in_cwd": sorted([f.name for f in cwd.iterdir()])[:30] if cwd.exists() else [],
+        "files_in_current_dir": sorted([f.name for f in current_dir.iterdir()])[:30] if current_dir.exists() else [],
+        "static_files": sorted([f.name for f in static_dir.iterdir()])[:30] if static_dir.exists() else []
+    }
 
 @app.post("/api/translate-sql", response_model=TranslateSqlResponse)
 async def translate_sql(request: TranslateSqlRequest):
@@ -288,6 +325,65 @@ async def get_catalogs_schemas():
             catalogs=["main"],
             schemas={"main": ["default"]}
         )
+
+# Serve other static files (favicon, manifest, etc.)
+@app.get("/favicon.ico")
+async def favicon():
+    favicon_path = static_dir / "favicon.ico"
+    if favicon_path.exists():
+        return FileResponse(str(favicon_path))
+    raise HTTPException(status_code=404, detail="Favicon not found")
+
+@app.get("/manifest.json")
+async def manifest():
+    manifest_path = static_dir / "manifest.json"
+    if manifest_path.exists():
+        return FileResponse(str(manifest_path))
+    raise HTTPException(status_code=404, detail="Manifest not found")
+
+@app.get("/logo{number}.png")
+async def logo(number: int):
+    logo_path = static_dir / f"logo{number}.png"
+    if logo_path.exists():
+        return FileResponse(str(logo_path))
+    raise HTTPException(status_code=404, detail="Logo not found")
+
+@app.get("/robots.txt")
+async def robots():
+    robots_path = static_dir / "robots.txt"
+    if robots_path.exists():
+        return FileResponse(str(robots_path), media_type="text/plain")
+    raise HTTPException(status_code=404, detail="Robots.txt not found")
+
+# Serve React app for all other routes
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    """Serve React app for all non-API routes"""
+    # Skip API routes
+    if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # If static directory doesn't exist, return error
+    if not static_dir.exists():
+        return {
+            "message": "DW Migration Assistant API",
+            "version": "1.0.0",
+            "error": "Static files directory not found",
+            "expected_path": str(static_dir)
+        }
+
+    # Try to serve the requested file
+    file_path = static_dir / full_path
+    if file_path.is_file():
+        return FileResponse(str(file_path))
+
+    # Otherwise serve index.html (React app will handle routing)
+    index_path = static_dir / "index.html"
+    if index_path.is_file():
+        return FileResponse(str(index_path))
+
+    # If no index.html, return error
+    raise HTTPException(status_code=404, detail="Application not found")
 
 if __name__ == "__main__":
     import uvicorn
