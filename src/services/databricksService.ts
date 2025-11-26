@@ -298,4 +298,71 @@ export class DatabricksService {
       return { suggestions: [], error: 'Request failed' };
     }
   }
+
+  // Connect and Migrate APIs
+  static async testSourceConnection(connection: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/connect/test'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(connection)
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Connection test failed' };
+    }
+  }
+
+  static async extractInventory(connectionId: string): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/connect/extract-inventory'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ connection_id: connectionId })
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Inventory extraction failed' };
+    }
+  }
+
+  static async runBulkMigration(request: any): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/migrate/bulk'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      return await response.json();
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Migration failed' };
+    }
+  }
+
+  static async getActiveConnections(): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/connect/active-connections'), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { connections: [] };
+    }
+  }
+
+  static async getMigrationHistory(): Promise<any> {
+    try {
+      const response = await fetch(getApiEndpoint('/api/migrate/history'), {
+        method: 'GET',
+        credentials: 'include'
+      });
+      return await response.json();
+    } catch (error) {
+      return { history: [] };
+    }
+  }
 }

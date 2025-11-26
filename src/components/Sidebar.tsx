@@ -15,6 +15,7 @@ import TranslateIcon from '@mui/icons-material/Translate';
 import BuildIcon from '@mui/icons-material/Build';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import JoinInnerIcon from '@mui/icons-material/JoinInner';
+import CloudSyncIcon from '@mui/icons-material/CloudSync';
 import HistoryIcon from '@mui/icons-material/History';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 
@@ -57,6 +58,11 @@ const Sidebar: React.FC<SidebarProps> = ({
       id: 'multiTableJoin',
       label: 'Multi-Table Join',
       icon: <JoinInnerIcon />,
+    },
+    {
+      id: 'connectAndMigrate',
+      label: 'Connect & Migrate',
+      icon: <CloudSyncIcon />,
     },
     { id: 'queryHistory', label: 'Query History', icon: <HistoryIcon /> },
     { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
